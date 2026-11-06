@@ -13,3 +13,20 @@ test("passes an abort signal so a hung endpoint cannot block forever", async () 
   await deliver("http://x", { id: 1 }, { fetchImpl });
   assert.ok(seen instanceof AbortSignal);
 });
+
+test("retries a 500 and stops once it succeeds", async () => {
+  const statuses = [500, 500, 200];
+  let calls = 0;
+  const fetchImpl = async () => { const s = statuses[calls++]; return { ok: s < 300, status: s }; };
+  const out = await deliver("http://x", { id: 1 }, { fetchImpl, wait: async () => {} });
+  assert.deepEqual(out, { ok: true, status: 200 });
+  assert.equal(calls, 3);
+});
+
+test("does not retry a 400", async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls++; return { ok: false, status: 400 }; };
+  const out = await deliver("http://x", { id: 1 }, { fetchImpl, wait: async () => {} });
+  assert.deepEqual(out, { ok: false, status: 400 });
+  assert.equal(calls, 1);
+});
